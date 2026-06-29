@@ -1,65 +1,275 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import useSWR from "swr";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
+import { Wind, Thermometer, Droplets, Activity, CloudFog, CloudRain, HeartPulse } from "lucide-react";
+import { calculateAQI } from "@/lib/aqi";
+
+type Telemetry = {
+  id: number;
+  timestamp: string;
+  pm25: number;
+  pm10: number;
+  voc: number;
+  temperature: number;
+  humidity: number;
+  co2: number;
+};
+
+const fetcher = (url: string) => fetch(url).then((res) => res.json()).then(data => data.reverse());
+
+export default function Dashboard() {
+  const { data, error, isLoading } = useSWR<Telemetry[]>('/api/telemetry', fetcher, { 
+    refreshInterval: 5000,
+    revalidateOnFocus: true,
+  });
+
+  const latest = data && data.length > 0 ? data[data.length - 1] : null;
+  
+  let aqiInfo = { aqi: 0, level: "Loading...", color: "bg-slate-800" };
+  if (latest) {
+    aqiInfo = calculateAQI(latest.pm25, latest.pm10);
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-8 font-sans">
+      <div className="max-w-7xl mx-auto space-y-8">
+        <header className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+              Air Quality Monitoring
+            </h1>
+            <p className="text-slate-400 mt-1">Live data from AI-IAQ6-PH Sensor</p>
+          </div>
+          {isLoading && <div className="text-sm text-slate-400 animate-pulse">Loading data...</div>}
+        </header>
+
+        {/* Health Status Banner */}
+        {latest && (
+          <div className={`p-6 rounded-2xl ${aqiInfo.color} text-white shadow-lg flex items-center justify-between transition-all duration-500`}>
+            <div>
+              <h2 className="text-2xl font-bold flex items-center gap-2">
+                <HeartPulse size={28} />
+                Air Quality is {aqiInfo.level}
+              </h2>
+              <p className="mt-1 opacity-90">
+                {aqiInfo.aqi <= 50 ? "The air is clean and optimal for health." 
+                : aqiInfo.aqi <= 100 ? "Air quality is acceptable." 
+                : "Air quality is poor. Consider improving ventilation."}
+                {latest.co2 > 1000 ? " High CO2 detected. Please open a window!" : ""}
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="text-4xl font-black">{aqiInfo.aqi}</div>
+              <div className="text-sm font-semibold opacity-90 uppercase tracking-widest">US EPA AQI</div>
+            </div>
+          </div>
+        )}
+
+        {/* Metric Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <MetricCard
+            title="CO2 Level"
+            value={latest?.co2.toString()}
+            unit="ppm"
+            icon={<Wind className="text-emerald-400" size={24} />}
+            status={getCO2Status(latest?.co2)}
+          />
+          <MetricCard
+            title="Temperature"
+            value={latest?.temperature.toFixed(1)}
+            unit="°C"
+            icon={<Thermometer className="text-orange-400" size={24} />}
+            status="normal"
+          />
+          <MetricCard
+            title="Humidity"
+            value={latest?.humidity.toFixed(1)}
+            unit="% RH"
+            icon={<Droplets className="text-blue-400" size={24} />}
+            status="normal"
+          />
+          <MetricCard
+            title="PM 2.5"
+            value={latest?.pm25.toString()}
+            unit="µg/m³"
+            icon={<CloudFog className="text-slate-400" size={24} />}
+            status={getPM25Status(latest?.pm25)}
+          />
+          <MetricCard
+            title="PM 10"
+            value={latest?.pm10.toString()}
+            unit="µg/m³"
+            icon={<CloudRain className="text-slate-400" size={24} />}
+            status={getPM10Status(latest?.pm10)}
+          />
+          <MetricCard
+            title="VOC"
+            value={latest?.voc.toString()}
+            unit="ppm"
+            icon={<Activity className="text-purple-400" size={24} />}
+            status="normal"
+          />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* CO2 Chart */}
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-lg">
+            <h3 className="text-lg font-semibold mb-6">CO2 Trends</h3>
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={data || []}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <XAxis
+                    dataKey="timestamp"
+                    tickFormatter={formatTime}
+                    stroke="#475569"
+                    fontSize={12}
+                  />
+                  <YAxis stroke="#475569" fontSize={12} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "#0f172a", border: "none" }}
+                    labelFormatter={formatTime}
+                  />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="co2"
+                    name="CO2 (ppm)"
+                    stroke="#10b981"
+                    strokeWidth={3}
+                    dot={false}
+                    activeDot={{ r: 6 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* PM Chart */}
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-lg">
+            <h3 className="text-lg font-semibold mb-6">Particulate Matter</h3>
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={data || []}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <XAxis
+                    dataKey="timestamp"
+                    tickFormatter={formatTime}
+                    stroke="#475569"
+                    fontSize={12}
+                  />
+                  <YAxis stroke="#475569" fontSize={12} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "#0f172a", border: "none" }}
+                    labelFormatter={formatTime}
+                  />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="pm25"
+                    name="PM2.5"
+                    stroke="#3b82f6"
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="pm10"
+                    name="PM10"
+                    stroke="#8b5cf6"
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         </div>
-      </main>
+      </div>
+    </div>
+  );
+}
+
+// Helpers
+function formatTime(isoString: any) {
+  if (!isoString || typeof isoString !== 'string') return "";
+  const date = new Date(isoString);
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function getCO2Status(co2?: number) {
+  if (co2 === undefined) return "normal";
+  if (co2 > 1500) return "critical";
+  if (co2 > 1000) return "warning";
+  return "normal";
+}
+
+function getPM25Status(pm25?: number) {
+  if (pm25 === undefined) return "normal";
+  if (pm25 > 50) return "critical";
+  if (pm25 > 25) return "warning";
+  return "normal";
+}
+
+function getPM10Status(pm10?: number) {
+  if (pm10 === undefined) return "normal";
+  if (pm10 > 100) return "critical";
+  if (pm10 > 50) return "warning";
+  return "normal";
+}
+
+function MetricCard({
+  title,
+  value,
+  unit,
+  icon,
+  status,
+}: {
+  title: string;
+  value?: string;
+  unit: string;
+  icon: React.ReactNode;
+  status: "normal" | "warning" | "critical";
+}) {
+  const statusColors = {
+    normal: "bg-slate-900 border-slate-800",
+    warning: "bg-orange-950/30 border-orange-900/50",
+    critical: "bg-red-950/30 border-red-900/50",
+  };
+
+  const textColors = {
+    normal: "text-slate-100",
+    warning: "text-orange-400",
+    critical: "text-red-400",
+  };
+
+  return (
+    <div
+      className={`p-6 rounded-2xl border backdrop-blur-sm transition-all duration-300 ${statusColors[status]}`}
+    >
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-sm font-medium text-slate-400">{title}</p>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className={`text-3xl font-bold tracking-tight ${textColors[status]}`}>
+              {value || "--"}
+            </span>
+            <span className="text-sm font-medium text-slate-500">{unit}</span>
+          </div>
+        </div>
+        <div className="p-3 bg-slate-800/50 rounded-xl">{icon}</div>
+      </div>
     </div>
   );
 }
