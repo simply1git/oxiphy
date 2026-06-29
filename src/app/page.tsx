@@ -13,29 +13,31 @@ import {
 const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 // Radial Progress Component
-const RadialProgress = ({ value, max, label, colorClass, size = 120 }: { value: number, max: number, label: string, colorClass: string, size?: number }) => {
-  const radius = (size / 2) - 10;
+const RadialProgress = ({ value, max, label, colorClass, size = 120, showText = true, glowClass = "" }: { value: number, max: number, label: string, colorClass: string, size?: number, showText?: boolean, glowClass?: string }) => {
+  const radius = (size / 2) - (showText ? 10 : 4); // Thinner margins if no text
   const circumference = radius * 2 * Math.PI;
   const safeValue = isNaN(value) ? 0 : Math.min(Math.max(value, 0), max);
   const strokeDashoffset = circumference - (safeValue / max) * circumference;
 
   return (
     <div className="relative flex flex-col items-center justify-center" style={{ width: size, height: size }}>
-      <svg className="transform -rotate-90 w-full h-full">
-        <circle cx={size/2} cy={size/2} r={radius} className="stroke-slate-700 fill-none" strokeWidth="8" />
+      <svg className={`transform -rotate-90 w-full h-full ${glowClass}`}>
+        <circle cx={size/2} cy={size/2} r={radius} className="stroke-slate-800 fill-none" strokeWidth={showText ? "8" : "6"} />
         <circle 
           cx={size/2} cy={size/2} r={radius} 
           className={`${colorClass} fill-none transition-all duration-1000 ease-out`} 
-          strokeWidth="8" 
+          strokeWidth={showText ? "8" : "6"} 
           strokeDasharray={circumference} 
           strokeDashoffset={strokeDashoffset} 
           strokeLinecap="round" 
         />
       </svg>
-      <div className="absolute flex flex-col items-center justify-center text-center">
-        <span className="text-3xl font-bold">{value}</span>
-        <span className="text-xs text-slate-400 uppercase tracking-widest">{label}</span>
-      </div>
+      {showText && (
+        <div className="absolute flex flex-col items-center justify-center text-center">
+          <span className="text-5xl font-extrabold tracking-tighter">{value}</span>
+          <span className="text-xs text-slate-400 uppercase tracking-widest mt-1 font-semibold">{label}</span>
+        </div>
+      )}
     </div>
   );
 };
@@ -56,10 +58,14 @@ export default function Home() {
 
   if (isLoading || !telemetryData) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
-        <div className="flex flex-col items-center space-y-4 animate-pulse">
-          <Activity className="w-12 h-12 text-blue-500 animate-spin" />
-          <h2 className="text-2xl font-semibold tracking-wider text-slate-300">CALIBRATING SENSORS...</h2>
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
+        <div className="flex flex-col items-center space-y-6">
+          <div className="relative w-24 h-24">
+            <div className="absolute inset-0 rounded-full border-t-2 border-blue-500 animate-spin"></div>
+            <div className="absolute inset-2 rounded-full border-r-2 border-emerald-400 animate-spin opacity-70" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
+            <Activity className="absolute inset-0 m-auto w-8 h-8 text-blue-400 animate-pulse" />
+          </div>
+          <h2 className="text-xl font-medium tracking-[0.2em] text-slate-400 animate-pulse">CALIBRATING SENSORS</h2>
         </div>
       </div>
     );
@@ -67,11 +73,11 @@ export default function Home() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
-        <div className="glass p-8 rounded-2xl flex flex-col items-center text-red-400">
-          <AlertTriangle className="w-16 h-16 mb-4" />
-          <h2 className="text-2xl font-bold">Connection Lost</h2>
-          <p className="mt-2 text-slate-400">Unable to reach environmental sensors.</p>
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
+        <div className="glass p-10 rounded-3xl flex flex-col items-center text-red-400 shadow-[0_0_50px_rgba(248,113,113,0.1)] border-red-500/20">
+          <AlertTriangle className="w-20 h-20 mb-6 drop-shadow-[0_0_15px_rgba(248,113,113,0.5)]" />
+          <h2 className="text-3xl font-bold tracking-tight text-white">Connection Lost</h2>
+          <p className="mt-3 text-slate-400 font-medium text-lg">Unable to reach environmental sensors.</p>
         </div>
       </div>
     );
@@ -83,9 +89,25 @@ export default function Home() {
 
   const aqiData = calculateAQI(latest.pm25, latest.pm10);
   const primaryAQI = aqiData.aqi;
+  
+  // Setup AQI Styling
+  let aqiGlow = "drop-shadow-[0_0_15px_rgba(52,211,153,0.6)]";
+  let aqiStroke = "stroke-emerald-400";
+  let aqiTextColor = "text-emerald-400";
+  
+  if (primaryAQI > 100) {
+    aqiGlow = "drop-shadow-[0_0_15px_rgba(239,68,68,0.6)]";
+    aqiStroke = "stroke-red-500";
+    aqiTextColor = "text-red-500";
+  } else if (primaryAQI > 50) {
+    aqiGlow = "drop-shadow-[0_0_15px_rgba(250,204,21,0.6)]";
+    aqiStroke = "stroke-yellow-400";
+    aqiTextColor = "text-yellow-400";
+  }
+
   const aqiStatus = { 
     label: aqiData.level, 
-    color: aqiData.color.replace('bg-', 'text-'), 
+    color: aqiTextColor, 
     message: `Current air quality is ${aqiData.level.toLowerCase()}.` 
   };
   
@@ -98,35 +120,37 @@ export default function Home() {
   const isCo2Warning = latest.co2 > 1000;
 
   return (
-    <main className="min-h-screen p-4 md:p-8 text-slate-100 max-w-7xl mx-auto space-y-6">
+    <main className="min-h-screen p-4 md:p-8 text-slate-100 max-w-7xl mx-auto space-y-8 font-sans">
       
       {/* Header Section */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
         <div>
-          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
+          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-indigo-400 to-emerald-400 pb-2">
             Air Quality Intelligence
           </h1>
-          <p className="text-slate-400 mt-2 flex items-center gap-2 font-medium">
-            <Clock className="w-4 h-4" /> Last updated: {new Date(latest.timestamp).toLocaleTimeString()}
+          <p className="text-slate-400 mt-1 flex items-center gap-2 font-medium text-sm md:text-base">
+            <Clock className="w-4 h-4 text-slate-500" /> Last updated: {new Date(latest.timestamp).toLocaleTimeString()}
           </p>
         </div>
         
         {/* Dynamic Health Badge */}
-        <div className={`glass px-6 py-3 rounded-full flex items-center gap-3 border ${aqiStatus.color.replace('text-', 'border-').replace('bg-', 'border-')} shadow-[0_0_15px_rgba(0,0,0,0.2)]`}>
-          {primaryAQI <= 50 ? <ShieldCheck className="text-emerald-400 w-6 h-6" /> : <AlertTriangle className={`${aqiStatus.color} w-6 h-6`} />}
-          <span className="text-lg font-bold tracking-wide">
-            {aqiStatus.label.toUpperCase()}
+        <div className={`glass px-8 py-4 rounded-full flex items-center gap-3 border ${aqiTextColor.replace('text-', 'border-')} shadow-[0_0_30px_rgba(0,0,0,0.3)] hover:scale-105 transition-transform duration-300 cursor-default`}>
+          {primaryAQI <= 50 ? <ShieldCheck className="text-emerald-400 w-7 h-7 drop-shadow-[0_0_10px_rgba(52,211,153,0.8)]" /> : <AlertTriangle className={`${aqiTextColor} w-7 h-7`} />}
+          <span className={`text-xl font-bold tracking-widest uppercase ${aqiTextColor}`}>
+            {aqiStatus.label}
           </span>
         </div>
       </header>
 
       {/* Warning Banner */}
       {isCo2Warning && (
-        <div className="glass !bg-red-500/20 !border-red-500/50 p-4 rounded-xl flex items-center gap-4 text-red-200 animate-pulse">
-          <AlertTriangle className="w-8 h-8 text-red-400 flex-shrink-0" />
+        <div className="glass !bg-red-950/40 !border-red-500/50 p-5 rounded-2xl flex items-center gap-5 text-red-200 shadow-[0_0_40px_rgba(239,68,68,0.2)]">
+          <div className="p-3 bg-red-500/20 rounded-full animate-pulse">
+            <AlertTriangle className="w-8 h-8 text-red-400 flex-shrink-0" />
+          </div>
           <div>
-            <h3 className="font-bold text-lg">High CO2 Concentration Detected</h3>
-            <p className="text-sm">CO2 levels are currently at {latest.co2} ppm. Please open a window or increase ventilation to improve cognitive function and air quality.</p>
+            <h3 className="font-bold text-xl tracking-tight">High CO2 Concentration Detected</h3>
+            <p className="text-sm md:text-base mt-1 text-red-300/80">CO2 levels are currently at <span className="font-bold text-red-400">{latest.co2} ppm</span>. Please open a window or increase ventilation to improve cognitive function and air quality.</p>
           </div>
         </div>
       )}
@@ -135,132 +159,136 @@ export default function Home() {
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
         
         {/* Main AQI Card (Spans 2 cols, 2 rows) */}
-        <div className="glass rounded-3xl p-8 col-span-1 md:col-span-2 row-span-2 flex flex-col justify-center items-center relative overflow-hidden group hover:bg-slate-800/40 transition-all duration-300">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl -mr-20 -mt-20 transition-all group-hover:bg-blue-500/20"></div>
+        <div className="glass rounded-[2rem] p-10 col-span-1 md:col-span-2 row-span-2 flex flex-col justify-center items-center relative overflow-hidden group hover:bg-slate-800/60 transition-all duration-500 cursor-default shadow-2xl">
+          <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-blue-500/5 rounded-full blur-[80px] -mr-40 -mt-40 transition-all group-hover:bg-blue-500/10"></div>
           
-          <h2 className="text-xl font-semibold text-slate-300 w-full text-left mb-6 flex items-center gap-2">
-            <Wind className="w-5 h-5 text-blue-400" /> Overall Air Quality Index
+          <h2 className="text-xl font-medium tracking-wide text-slate-300 w-full text-left mb-8 flex items-center gap-3">
+            <Wind className="w-6 h-6 text-blue-400" /> Overall Air Quality Index
           </h2>
           
-          <RadialProgress 
-            value={primaryAQI} 
-            max={300} 
-            label="AQI" 
-            colorClass={primaryAQI <= 50 ? "stroke-emerald-400" : primaryAQI <= 100 ? "stroke-yellow-400" : "stroke-red-500"} 
-            size={220} 
-          />
+          <div className="my-4">
+            <RadialProgress 
+              value={primaryAQI} 
+              max={300} 
+              label="AQI" 
+              colorClass={aqiStroke} 
+              glowClass={aqiGlow}
+              size={260} 
+            />
+          </div>
           
-          <p className="text-center mt-6 text-slate-400 text-sm max-w-xs leading-relaxed">
+          <p className="text-center mt-10 text-slate-400 text-base md:text-lg max-w-sm leading-relaxed font-medium">
             {aqiStatus.message}
           </p>
         </div>
 
         {/* CO2 Card */}
-        <div className="glass rounded-3xl p-6 flex flex-col justify-between hover:scale-[1.02] transition-transform cursor-default relative overflow-hidden">
-          <div className="flex justify-between items-start mb-4">
-            <h3 className="text-slate-400 font-medium flex items-center gap-2"><CloudFog className="w-4 h-4 text-purple-400"/> Carbon Dioxide</h3>
+        <div className="glass rounded-3xl p-8 flex flex-col justify-between hover:scale-[1.03] hover:-translate-y-1 hover:bg-slate-800/50 transition-all duration-300 cursor-default relative overflow-hidden group">
+          <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-purple-500/20 transition-all"></div>
+          <div className="flex justify-between items-start mb-6 z-10">
+            <h3 className="text-slate-400 font-medium flex items-center gap-2"><CloudFog className="w-5 h-5 text-purple-400"/> Carbon Dioxide</h3>
+            <RadialProgress value={latest.co2} max={2000} label="" colorClass="stroke-purple-500" size={40} showText={false} />
           </div>
-          <div className="flex items-end justify-between">
-            <div>
-              <span className="text-4xl font-bold tracking-tighter">{latest.co2}</span>
-              <span className="text-slate-500 ml-1 text-sm font-semibold">PPM</span>
-            </div>
-            <RadialProgress value={latest.co2} max={2000} label="" colorClass="stroke-purple-500" size={60} />
+          <div className="flex items-baseline gap-2 z-10">
+            <span className="text-5xl font-extrabold tracking-tighter text-white drop-shadow-md">{latest.co2}</span>
+            <span className="text-purple-400/80 text-sm font-bold tracking-widest">PPM</span>
           </div>
         </div>
 
         {/* VOC Card */}
-        <div className="glass rounded-3xl p-6 flex flex-col justify-between hover:scale-[1.02] transition-transform cursor-default relative overflow-hidden">
-          <div className="flex justify-between items-start mb-4">
-            <h3 className="text-slate-400 font-medium flex items-center gap-2"><Activity className="w-4 h-4 text-amber-400"/> TVOC</h3>
+        <div className="glass rounded-3xl p-8 flex flex-col justify-between hover:scale-[1.03] hover:-translate-y-1 hover:bg-slate-800/50 transition-all duration-300 cursor-default relative overflow-hidden group">
+          <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition-all"></div>
+          <div className="flex justify-between items-start mb-6 z-10">
+            <h3 className="text-slate-400 font-medium flex items-center gap-2"><Activity className="w-5 h-5 text-amber-400"/> TVOC</h3>
+            <RadialProgress value={latest.voc} max={1000} label="" colorClass="stroke-amber-500" size={40} showText={false} />
           </div>
-          <div className="flex items-end justify-between">
-            <div>
-              <span className="text-4xl font-bold tracking-tighter">{latest.voc}</span>
-              <span className="text-slate-500 ml-1 text-sm font-semibold">PPB</span>
-            </div>
-            <RadialProgress value={latest.voc} max={1000} label="" colorClass="stroke-amber-500" size={60} />
+          <div className="flex items-baseline gap-2 z-10">
+            <span className="text-5xl font-extrabold tracking-tighter text-white drop-shadow-md">{latest.voc}</span>
+            <span className="text-amber-400/80 text-sm font-bold tracking-widest">PPB</span>
           </div>
         </div>
 
         {/* Temperature Card */}
-        <div className="glass rounded-3xl p-6 flex flex-col justify-between hover:scale-[1.02] transition-transform cursor-default relative overflow-hidden">
-           <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
-          <div className="flex justify-between items-start mb-4">
-            <h3 className="text-slate-400 font-medium flex items-center gap-2"><Thermometer className="w-4 h-4 text-orange-400"/> Temperature</h3>
+        <div className="glass rounded-3xl p-8 flex flex-col justify-between hover:scale-[1.03] hover:-translate-y-1 hover:bg-slate-800/50 transition-all duration-300 cursor-default relative overflow-hidden group">
+           <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl -mr-10 -mt-10 group-hover:bg-orange-500/20 transition-all"></div>
+          <div className="flex justify-between items-start mb-8 z-10">
+            <h3 className="text-slate-400 font-medium flex items-center gap-2"><Thermometer className="w-5 h-5 text-orange-400"/> Temperature</h3>
           </div>
-          <div>
-            <span className="text-5xl font-bold tracking-tighter">{latest.temperature.toFixed(1)}</span>
-            <span className="text-slate-400 ml-1 text-xl font-light">°C</span>
+          <div className="flex items-start z-10">
+            <span className="text-6xl font-extrabold tracking-tighter text-white drop-shadow-md">{latest.temperature.toFixed(1)}</span>
+            <span className="text-orange-400 ml-1 text-2xl font-medium mt-1">°C</span>
           </div>
         </div>
 
         {/* Humidity Card */}
-        <div className="glass rounded-3xl p-6 flex flex-col justify-between hover:scale-[1.02] transition-transform cursor-default relative overflow-hidden">
-          <div className="absolute bottom-0 left-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl -ml-10 -mb-10"></div>
-          <div className="flex justify-between items-start mb-4">
-            <h3 className="text-slate-400 font-medium flex items-center gap-2"><Droplets className="w-4 h-4 text-cyan-400"/> Humidity</h3>
+        <div className="glass rounded-3xl p-8 flex flex-col justify-between hover:scale-[1.03] hover:-translate-y-1 hover:bg-slate-800/50 transition-all duration-300 cursor-default relative overflow-hidden group">
+          <div className="absolute bottom-0 left-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-3xl -ml-10 -mb-10 group-hover:bg-cyan-500/20 transition-all"></div>
+          <div className="flex justify-between items-start mb-8 z-10">
+            <h3 className="text-slate-400 font-medium flex items-center gap-2"><Droplets className="w-5 h-5 text-cyan-400"/> Humidity</h3>
           </div>
-          <div>
-            <span className="text-5xl font-bold tracking-tighter">{latest.humidity.toFixed(1)}</span>
-            <span className="text-slate-400 ml-1 text-xl font-light">%</span>
+          <div className="flex items-start z-10">
+            <span className="text-6xl font-extrabold tracking-tighter text-white drop-shadow-md">{latest.humidity.toFixed(1)}</span>
+            <span className="text-cyan-400 ml-1 text-2xl font-medium mt-1">%</span>
           </div>
         </div>
 
       </div>
 
       {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
         
         {/* Particulates Chart */}
-        <div className="glass rounded-3xl p-6 h-[350px] flex flex-col">
-          <h3 className="text-lg font-semibold text-slate-300 mb-6 flex items-center gap-2">
-            <Wind className="w-4 h-4 text-blue-400"/> Particulate Matter Trends
+        <div className="glass rounded-3xl p-8 h-[400px] flex flex-col group hover:bg-slate-800/40 transition-colors duration-500">
+          <h3 className="text-xl font-medium text-slate-300 mb-8 flex items-center gap-2">
+            <Wind className="w-5 h-5 text-blue-400"/> Particulate Matter Trends
           </h3>
           <div className="flex-1 w-full h-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorPm25" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/>
                     <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                   </linearGradient>
                   <linearGradient id="colorPm10" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4}/>
                     <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                <XAxis dataKey="time" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} opacity={0.5} />
+                <XAxis dataKey="time" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} minTickGap={40} />
                 <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                 <RechartsTooltip 
-                  contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', backdropFilter: 'blur(8px)' }}
-                  itemStyle={{ color: '#f8fafc' }}
+                  contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', backdropFilter: 'blur(12px)', boxShadow: '0 10px 40px rgba(0,0,0,0.5)' }}
+                  itemStyle={{ color: '#f8fafc', fontWeight: 500 }}
+                  labelStyle={{ color: '#94a3b8', marginBottom: '8px' }}
                 />
-                <Area type="monotone" dataKey="pm25" name="PM2.5 (µg/m³)" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorPm25)" />
-                <Area type="monotone" dataKey="pm10" name="PM10 (µg/m³)" stroke="#8b5cf6" strokeWidth={3} fillOpacity={1} fill="url(#colorPm10)" />
+                <Area type="monotone" dataKey="pm25" name="PM2.5 (µg/m³)" stroke="#3b82f6" strokeWidth={4} fillOpacity={1} fill="url(#colorPm25)" activeDot={{ r: 8, fill: '#3b82f6', stroke: '#0f172a', strokeWidth: 2 }} />
+                <Area type="monotone" dataKey="pm10" name="PM10 (µg/m³)" stroke="#8b5cf6" strokeWidth={4} fillOpacity={1} fill="url(#colorPm10)" activeDot={{ r: 8, fill: '#8b5cf6', stroke: '#0f172a', strokeWidth: 2 }} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* CO2 & VOC Chart */}
-        <div className="glass rounded-3xl p-6 h-[350px] flex flex-col">
-          <h3 className="text-lg font-semibold text-slate-300 mb-6 flex items-center gap-2">
-            <CloudFog className="w-4 h-4 text-purple-400"/> Gas Concentration Trends
+        <div className="glass rounded-3xl p-8 h-[400px] flex flex-col group hover:bg-slate-800/40 transition-colors duration-500">
+          <h3 className="text-xl font-medium text-slate-300 mb-8 flex items-center gap-2">
+            <CloudFog className="w-5 h-5 text-purple-400"/> Gas Concentration Trends
           </h3>
           <div className="flex-1 w-full h-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                <XAxis dataKey="time" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} opacity={0.5} />
+                <XAxis dataKey="time" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} minTickGap={40} />
                 <YAxis yAxisId="left" stroke="#a855f7" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis yAxisId="right" orientation="right" stroke="#f59e0b" fontSize={12} tickLine={false} axisLine={false} />
                 <RechartsTooltip 
-                  contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', backdropFilter: 'blur(8px)' }}
+                  contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', backdropFilter: 'blur(12px)', boxShadow: '0 10px 40px rgba(0,0,0,0.5)' }}
+                  itemStyle={{ fontWeight: 500 }}
+                  labelStyle={{ color: '#94a3b8', marginBottom: '8px' }}
                 />
-                <Line yAxisId="left" type="monotone" dataKey="co2" name="CO2 (ppm)" stroke="#a855f7" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
-                <Line yAxisId="right" type="monotone" dataKey="voc" name="VOC (ppb)" stroke="#f59e0b" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
+                <Line yAxisId="left" type="monotone" dataKey="co2" name="CO2 (ppm)" stroke="#a855f7" strokeWidth={4} dot={false} activeDot={{ r: 8, fill: '#a855f7', stroke: '#0f172a', strokeWidth: 2 }} />
+                <Line yAxisId="right" type="monotone" dataKey="voc" name="VOC (ppb)" stroke="#f59e0b" strokeWidth={4} dot={false} activeDot={{ r: 8, fill: '#f59e0b', stroke: '#0f172a', strokeWidth: 2 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
