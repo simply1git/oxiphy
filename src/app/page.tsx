@@ -5,7 +5,7 @@ import useSWR from 'swr';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Area, AreaChart 
 } from 'recharts';
-import { calculateAQI, getAQIStatus } from '@/lib/aqi';
+import { calculateAQI } from '@/lib/aqi';
 import { 
   Wind, Droplets, Thermometer, CloudFog, Activity, AlertTriangle, ShieldCheck, Clock
 } from 'lucide-react';
@@ -81,10 +81,13 @@ export default function Home() {
     pm25: 0, pm10: 0, voc: 0, temperature: 0, humidity: 0, co2: 0, timestamp: new Date().toISOString()
   };
 
-  const pm25AQI = calculateAQI(latest.pm25, 'pm2.5');
-  const pm10AQI = calculateAQI(latest.pm10, 'pm10');
-  const primaryAQI = Math.max(pm25AQI, pm10AQI);
-  const aqiStatus = getAQIStatus(primaryAQI);
+  const aqiData = calculateAQI(latest.pm25, latest.pm10);
+  const primaryAQI = aqiData.aqi;
+  const aqiStatus = { 
+    label: aqiData.level, 
+    color: aqiData.color.replace('bg-', 'text-'), 
+    message: `Current air quality is ${aqiData.level.toLowerCase()}.` 
+  };
   
   // Format data for Recharts (reverse to show chronological left-to-right)
   const chartData = [...telemetryData].reverse().map(item => ({
