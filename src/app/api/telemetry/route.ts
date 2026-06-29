@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const limitParam = searchParams.get('limit');
-    const limit = limitParam ? parseInt(limitParam, 10) : 50;
+    const limit = limitParam ? parseInt(limitParam, 10) : 20;
 
     const history = await prisma.telemetry.findMany({
       orderBy: { timestamp: 'desc' },
