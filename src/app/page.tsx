@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import useSWR from 'swr';
+import mqtt from 'mqtt';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Area, AreaChart 
 } from 'recharts';
@@ -14,7 +15,7 @@ const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 // Radial Progress Component
 const RadialProgress = ({ value, max, label, colorClass, size = 120, showText = true, glowClass = "" }: { value: number, max: number, label: string, colorClass: string, size?: number, showText?: boolean, glowClass?: string }) => {
-  const radius = (size / 2) - (showText ? 10 : 4); // Thinner margins if no text
+  const radius = (size / 2) - (showText ? 10 : 4); 
   const circumference = radius * 2 * Math.PI;
   const safeValue = isNaN(value) ? 0 : Math.min(Math.max(value, 0), max);
   const strokeDashoffset = circumference - (safeValue / max) * circumference;
@@ -43,20 +44,52 @@ const RadialProgress = ({ value, max, label, colorClass, size = 120, showText = 
 };
 
 export default function Home() {
+  // SWR fetches historical data from the database
   const { data: telemetryData, error, isLoading } = useSWR('/api/telemetry?limit=20', fetcher, {
-    refreshInterval: 15000,
     revalidateOnFocus: true,
   });
 
   const [mounted, setMounted] = useState(false);
+  const [liveData, setLiveData] = useState<any[]>([]);
+  const [mqttStatus, setMqttStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
 
   useEffect(() => {
     setMounted(true);
+    
+    // Connect to EMQX Public MQTT Broker via Secure WebSockets
+    const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+
+    client.on('connect', () => {
+      console.log('Connected to MQTT broker');
+      setMqttStatus('connected');
+      client.subscribe('oxiphy/telemetry/live');
+    });
+
+    client.on('message', (topic, message) => {
+      try {
+        const data = JSON.parse(message.toString());
+        // Append an ISO timestamp if the ESP32 didn't provide one
+        if (!data.timestamp) data.timestamp = new Date().toISOString();
+        
+        // Unshift the new live data into our state, keeping max 20 records
+        setLiveData(prev => [data, ...prev].slice(0, 20));
+      } catch (err) {
+        console.error("MQTT parsing error", err);
+      }
+    });
+
+    client.on('close', () => {
+      setMqttStatus('disconnected');
+    });
+
+    return () => {
+      client.end();
+    };
   }, []);
 
   if (!mounted) return null;
 
-  if (isLoading || !telemetryData) {
+  if (isLoading && liveData.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
         <div className="flex flex-col items-center space-y-6">
@@ -71,19 +104,12 @@ export default function Home() {
     );
   }
 
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
-        <div className="glass p-10 rounded-3xl flex flex-col items-center text-red-400 shadow-[0_0_50px_rgba(248,113,113,0.1)] border-red-500/20">
-          <AlertTriangle className="w-20 h-20 mb-6 drop-shadow-[0_0_15px_rgba(248,113,113,0.5)]" />
-          <h2 className="text-3xl font-bold tracking-tight text-white">Connection Lost</h2>
-          <p className="mt-3 text-slate-400 font-medium text-lg">Unable to reach environmental sensors.</p>
-        </div>
-      </div>
-    );
-  }
+  // Combine live MQTT data with historical SWR data
+  const displayData = liveData.length > 0 
+    ? [...liveData, ...(telemetryData || [])].slice(0, 20) 
+    : (telemetryData || []);
 
-  const latest = telemetryData[0] || {
+  const latest = displayData[0] || {
     pm25: 0, pm10: 0, voc: 0, temperature: 0, humidity: 0, co2: 0, timestamp: new Date().toISOString()
   };
 
@@ -111,10 +137,9 @@ export default function Home() {
     message: `Current air quality is ${aqiData.level.toLowerCase()}.` 
   };
   
-  // Format data for Recharts (reverse to show chronological left-to-right)
-  const chartData = [...telemetryData].reverse().map(item => ({
+  const chartData = [...displayData].reverse().map(item => ({
     ...item,
-    time: new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    time: new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   }));
 
   const isCo2Warning = latest.co2 > 1000;
@@ -122,18 +147,23 @@ export default function Home() {
   return (
     <main className="min-h-screen p-4 md:p-8 text-slate-100 max-w-7xl mx-auto space-y-8 font-sans">
       
-      {/* Header Section */}
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
         <div>
           <h1 className="text-4xl md:text-6xl font-extrabold tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-indigo-400 to-emerald-400 pb-2">
             Air Quality Intelligence
           </h1>
-          <p className="text-slate-400 mt-1 flex items-center gap-2 font-medium text-sm md:text-base">
-            <Clock className="w-4 h-4 text-slate-500" /> Last updated: {new Date(latest.timestamp).toLocaleTimeString()}
-          </p>
+          <div className="text-slate-400 mt-2 flex items-center gap-4 font-medium text-sm md:text-base">
+            <span className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-slate-500" /> 
+              {mqttStatus === 'connected' ? 'Live (MQTT WebSockets)' : 'Historical Database'}
+            </span>
+            <span className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${mqttStatus === 'connected' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
+              {mqttStatus === 'connected' ? 'Connected' : 'Reconnecting...'}
+            </span>
+          </div>
         </div>
         
-        {/* Dynamic Health Badge */}
         <div className={`glass px-8 py-4 rounded-full flex items-center gap-3 border ${aqiTextColor.replace('text-', 'border-')} shadow-[0_0_30px_rgba(0,0,0,0.3)] hover:scale-105 transition-transform duration-300 cursor-default`}>
           {primaryAQI <= 50 ? <ShieldCheck className="text-emerald-400 w-7 h-7 drop-shadow-[0_0_10px_rgba(52,211,153,0.8)]" /> : <AlertTriangle className={`${aqiTextColor} w-7 h-7`} />}
           <span className={`text-xl font-bold tracking-widest uppercase ${aqiTextColor}`}>
@@ -142,7 +172,6 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Warning Banner */}
       {isCo2Warning && (
         <div className="glass !bg-red-950/40 !border-red-500/50 p-5 rounded-2xl flex items-center gap-5 text-red-200 shadow-[0_0_40px_rgba(239,68,68,0.2)]">
           <div className="p-3 bg-red-500/20 rounded-full animate-pulse">
@@ -155,10 +184,8 @@ export default function Home() {
         </div>
       )}
 
-      {/* Bento Grid Layout */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
         
-        {/* Main AQI Card (Spans 2 cols, 2 rows) */}
         <div className="glass rounded-[2rem] p-10 col-span-1 md:col-span-2 row-span-2 flex flex-col justify-center items-center relative overflow-hidden group hover:bg-slate-800/60 transition-all duration-500 cursor-default shadow-2xl">
           <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-blue-500/5 rounded-full blur-[80px] -mr-40 -mt-40 transition-all group-hover:bg-blue-500/10"></div>
           
@@ -182,7 +209,6 @@ export default function Home() {
           </p>
         </div>
 
-        {/* CO2 Card */}
         <div className="glass rounded-3xl p-8 flex flex-col justify-between hover:scale-[1.03] hover:-translate-y-1 hover:bg-slate-800/50 transition-all duration-300 cursor-default relative overflow-hidden group">
           <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-purple-500/20 transition-all"></div>
           <div className="flex justify-between items-start mb-6 z-10">
@@ -195,7 +221,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* VOC Card */}
         <div className="glass rounded-3xl p-8 flex flex-col justify-between hover:scale-[1.03] hover:-translate-y-1 hover:bg-slate-800/50 transition-all duration-300 cursor-default relative overflow-hidden group">
           <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition-all"></div>
           <div className="flex justify-between items-start mb-6 z-10">
@@ -208,7 +233,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Temperature Card */}
         <div className="glass rounded-3xl p-8 flex flex-col justify-between hover:scale-[1.03] hover:-translate-y-1 hover:bg-slate-800/50 transition-all duration-300 cursor-default relative overflow-hidden group">
            <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl -mr-10 -mt-10 group-hover:bg-orange-500/20 transition-all"></div>
           <div className="flex justify-between items-start mb-8 z-10">
@@ -220,7 +244,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Humidity Card */}
         <div className="glass rounded-3xl p-8 flex flex-col justify-between hover:scale-[1.03] hover:-translate-y-1 hover:bg-slate-800/50 transition-all duration-300 cursor-default relative overflow-hidden group">
           <div className="absolute bottom-0 left-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-3xl -ml-10 -mb-10 group-hover:bg-cyan-500/20 transition-all"></div>
           <div className="flex justify-between items-start mb-8 z-10">
@@ -234,10 +257,8 @@ export default function Home() {
 
       </div>
 
-      {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
         
-        {/* Particulates Chart */}
         <div className="glass rounded-3xl p-8 h-[400px] flex flex-col group hover:bg-slate-800/40 transition-colors duration-500">
           <h3 className="text-xl font-medium text-slate-300 mb-8 flex items-center gap-2">
             <Wind className="w-5 h-5 text-blue-400"/> Particulate Matter Trends
@@ -270,7 +291,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* CO2 & VOC Chart */}
         <div className="glass rounded-3xl p-8 h-[400px] flex flex-col group hover:bg-slate-800/40 transition-colors duration-500">
           <h3 className="text-xl font-medium text-slate-300 mb-8 flex items-center gap-2">
             <CloudFog className="w-5 h-5 text-purple-400"/> Gas Concentration Trends
