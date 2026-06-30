@@ -4,23 +4,23 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import useSWR from 'swr';
 import mqtt from 'mqtt';
 import {
-  AreaChart, Area, LineChart, Line, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell
 } from 'recharts';
 import {
   calculateAQI, getCO2Severity, getTVOCSeverity, getTempSeverity, getHumiditySeverity,
   getPM25Severity, getPM10Severity, type SeverityResult
 } from '@/lib/aqi';
 import {
-  Wind, Droplets, Thermometer, CloudFog, Activity, Gauge, Wifi, WifiOff, TrendingUp, ArrowUp, ArrowDown, Minus
+  Wind, Droplets, Thermometer, CloudFog, Activity, Gauge, Wifi, WifiOff, TrendingUp, ArrowUp, ArrowDown, Minus, BarChart2, PieChart as PieChartIcon
 } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 // ── Tabs ──────────────────────────────────────────────────────
-type TabId = 'overview' | 'pm25' | 'pm10' | 'co2' | 'tvoc';
+type TabId = 'overview' | 'history' | 'pm25' | 'pm10' | 'co2' | 'tvoc';
 const TABS: { id: TabId; label: string; chemical?: string }[] = [
   { id: 'overview', label: 'Overview' },
+  { id: 'history', label: 'History' },
   { id: 'pm25', label: 'PM', chemical: '2.5' },
   { id: 'pm10', label: 'PM', chemical: '10' },
   { id: 'co2',  label: 'CO', chemical: '2' },
@@ -109,7 +109,6 @@ const DrillDownView = ({ title, chemical, unit, dataKey, color, chartData, lates
 
   return (
     <div className="animate-fade-in space-y-6">
-      {/* Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="glass rounded-xl p-5">
           <span className="text-xs text-slate-500 uppercase tracking-wider font-medium">Current</span>
@@ -141,7 +140,6 @@ const DrillDownView = ({ title, chemical, unit, dataKey, color, chartData, lates
         </div>
       </div>
 
-      {/* Large Area Chart */}
       <div className="glass rounded-2xl p-6">
         <h3 className="text-lg font-semibold text-slate-300 mb-6 flex items-center gap-2">
           <TrendingUp className="w-5 h-5" style={{ color }} />
@@ -170,7 +168,6 @@ const DrillDownView = ({ title, chemical, unit, dataKey, color, chartData, lates
         </div>
       </div>
 
-      {/* Bar Chart */}
       <div className="glass rounded-2xl p-6">
         <h3 className="text-lg font-semibold text-slate-300 mb-6">Reading Distribution</h3>
         <div className="h-[250px]">
@@ -199,6 +196,8 @@ const DrillDownView = ({ title, chemical, unit, dataKey, color, chartData, lates
 // ══════════════════════════════════════════════════════════════
 export default function Home() {
   const { data: telemetryData, isLoading } = useSWR('/api/telemetry?limit=20', fetcher, { revalidateOnFocus: true });
+  const { data: hourlyData } = useSWR('/api/analytics/hourly', fetcher);
+  const { data: dailyData } = useSWR('/api/analytics/daily', fetcher);
 
   const [mounted, setMounted] = useState(false);
   const [liveData, setLiveData] = useState<any[]>([]);
@@ -221,7 +220,6 @@ export default function Home() {
     });
     client.on('close', () => setMqttStatus('disconnected'));
 
-    // Check every second if the ESP32 is still sending data
     const statusInterval = setInterval(() => {
       const elapsed = Date.now() - lastMessageTime.current;
       if (lastMessageTime.current === 0 || elapsed > 10000) {
@@ -247,6 +245,36 @@ export default function Home() {
     })),
     [displayData]
   );
+
+  const hourlyChartData = useMemo(() => {
+    if (!hourlyData) return [];
+    return [...hourlyData].reverse().map(item => ({
+      ...item,
+      time: new Date(item.hour).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }));
+  }, [hourlyData]);
+
+  const dailyChartData = useMemo(() => {
+    if (!dailyData) return [];
+    return [...dailyData].reverse().map(item => ({
+      ...item,
+      time: new Date(item.date).toLocaleDateString([], { month: 'short', day: 'numeric' })
+    }));
+  }, [dailyData]);
+
+  const aqiCategories = useMemo(() => {
+    if (!dailyData || dailyData.length === 0) return [];
+    const counts = { Good: 0, Satisfactory: 0, Moderate: 0, Poor: 0, 'Very Poor': 0, Severe: 0 };
+    dailyData.forEach((d: any) => { if (counts[d.aqiLevel as keyof typeof counts] !== undefined) counts[d.aqiLevel as keyof typeof counts]++; });
+    return [
+      { name: 'Good', value: counts.Good, color: '#22c55e' },
+      { name: 'Satisfactory', value: counts.Satisfactory, color: '#84cc16' },
+      { name: 'Moderate', value: counts.Moderate, color: '#eab308' },
+      { name: 'Poor', value: counts.Poor, color: '#f97316' },
+      { name: 'Very Poor', value: counts['Very Poor'], color: '#ef4444' },
+      { name: 'Severe', value: counts.Severe, color: '#991b1b' },
+    ].filter(c => c.value > 0);
+  }, [dailyData]);
 
   if (!mounted) return null;
 
@@ -288,7 +316,6 @@ export default function Home() {
       {/* ── Hero AQI Banner ─────────────────────────────────── */}
       <div className={`hero-banner glass ${aqiResult.borderColor} border`}>
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-          {/* Left: AQI */}
           <div className="flex items-center gap-8">
             <div>
               <span className={`mono-value text-7xl md:text-8xl font-extrabold ${aqiResult.textColor}`}>
@@ -316,7 +343,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Right: Meta */}
           <div className="flex flex-col items-start md:items-end gap-2 text-sm">
             <div className="flex items-center gap-2">
               {mqttStatus !== 'connected'
@@ -350,9 +376,112 @@ export default function Home() {
 
       {/* ── Tab Content ─────────────────────────────────────── */}
 
-      {activeTab === 'overview' && (
+      {activeTab === 'history' ? (
+        <div className="space-y-6 animate-fade-in">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="glass rounded-2xl p-6 lg:col-span-2 flex flex-col h-[400px]">
+              <h3 className="text-base font-semibold text-slate-300 mb-4 flex items-center gap-2">
+                <BarChart2 className="w-4 h-4 text-emerald-400" /> Day & Night AQI Trend (24h)
+              </h3>
+              <div className="flex-1">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={hourlyChartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                    <XAxis dataKey="time" stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
+                    <RechartsTooltip
+                      contentStyle={{ backgroundColor: 'rgba(15,23,42,0.95)', border: '1px solid rgba(148,163,184,0.1)', borderRadius: '12px', fontSize: '13px' }}
+                      itemStyle={{ color: '#f8fafc', fontWeight: 600 }} labelStyle={{ color: '#94a3b8' }}
+                      formatter={(value: any) => [`${Math.round(value)}`, 'Avg AQI']}
+                    />
+                    <Bar dataKey="aqiAvg" radius={[4, 4, 0, 0]}>
+                      {hourlyChartData.map((entry, index) => {
+                        const level = entry.aqiLevel;
+                        let fill = '#22c55e';
+                        if (level === 'Satisfactory') fill = '#84cc16';
+                        if (level === 'Moderate') fill = '#eab308';
+                        if (level === 'Poor') fill = '#f97316';
+                        if (level === 'Very Poor') fill = '#ef4444';
+                        if (level === 'Severe') fill = '#991b1b';
+                        return <Cell key={`cell-${index}`} fill={fill} />;
+                      })}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="glass rounded-2xl p-6 flex flex-col h-[400px]">
+              <h3 className="text-base font-semibold text-slate-300 mb-4 flex items-center gap-2">
+                <PieChartIcon className="w-4 h-4 text-blue-400" /> Days vs Air Quality (30d)
+              </h3>
+              <div className="flex-1 flex flex-col items-center justify-center">
+                <div className="w-full h-[250px]">
+                  {aqiCategories.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={aqiCategories} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                          {aqiCategories.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} stroke="rgba(0,0,0,0)" />)}
+                        </Pie>
+                        <RechartsTooltip
+                          contentStyle={{ backgroundColor: 'rgba(15,23,42,0.95)', border: '1px solid rgba(148,163,184,0.1)', borderRadius: '12px', fontSize: '13px' }}
+                          itemStyle={{ color: '#f8fafc', fontWeight: 600 }}
+                          formatter={(value: any) => [`${value} Days`, 'Duration']}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-slate-500 text-sm">Waiting for daily aggregates...</div>
+                  )}
+                </div>
+                <div className="w-full mt-4 flex flex-col gap-2 px-2">
+                  {aqiCategories.map((cat, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }}></div>
+                        <span className="text-slate-300">{cat.name}</span>
+                      </div>
+                      <span className="text-slate-400 font-semibold">{cat.value} days</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="glass rounded-2xl p-6 h-[400px] flex flex-col">
+            <h3 className="text-base font-semibold text-slate-300 mb-4 flex items-center gap-2">
+              <Activity className="w-4 h-4 text-purple-400" /> 30-Day Long Term Trend
+            </h3>
+            <div className="flex-1">
+              {dailyChartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={dailyChartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#a855f7" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#a855f7" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                    <XAxis dataKey="time" stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
+                    <RechartsTooltip
+                      contentStyle={{ backgroundColor: 'rgba(15,23,42,0.95)', border: '1px solid rgba(148,163,184,0.1)', borderRadius: '12px', fontSize: '13px' }}
+                      itemStyle={{ color: '#f8fafc' }} labelStyle={{ color: '#94a3b8' }}
+                      formatter={(value: any) => [`${Math.round(value)}`, 'Avg AQI']}
+                    />
+                    <Area type="monotone" dataKey="aqiAvg" name="Daily Avg AQI" stroke="#a855f7" strokeWidth={2.5} fill="url(#trendFill)" dot={{ r: 4, fill: '#a855f7', stroke: '#0b1120', strokeWidth: 2 }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-slate-500 text-sm">Accumulating daily data...</div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : activeTab === 'overview' ? (
         <div className="animate-fade-in space-y-6">
-          {/* Pollutant Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <PollutantCard
               icon={<Wind className="w-4 h-4 text-blue-400" />}
@@ -446,7 +575,7 @@ export default function Home() {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
       {activeTab === 'pm25' && (
         <DrillDownView title="PM" chemical="2.5" unit="µg/m³" dataKey="pm25" color="#3b82f6" chartData={chartData} latest={latest} severity={pm25Sev} />

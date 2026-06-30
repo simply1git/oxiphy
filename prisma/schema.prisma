@@ -4,8 +4,8 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("POSTGRES_PRISMA_URL")
-  directUrl = env("POSTGRES_URL_NON_POOLING")
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Telemetry {
@@ -17,4 +17,52 @@ model Telemetry {
   temperature Float
   humidity    Float
   co2         Int
+}
+
+model HourlyAggregate {
+  id          Int      @id @default(autoincrement())
+  hour        DateTime @unique
+  pm25Avg     Float    @default(0)
+  pm25Min     Int      @default(9999)
+  pm25Max     Int      @default(0)
+  pm10Avg     Float    @default(0)
+  pm10Min     Int      @default(9999)
+  pm10Max     Int      @default(0)
+  co2Avg      Float    @default(0)
+  co2Min      Int      @default(9999)
+  co2Max      Int      @default(0)
+  vocAvg      Float    @default(0)
+  vocMin      Int      @default(9999)
+  vocMax      Int      @default(0)
+  tempAvg     Float    @default(0)
+  tempMin     Float    @default(999)
+  tempMax     Float    @default(-99)
+  humAvg      Float    @default(0)
+  humMin      Float    @default(100)
+  humMax      Float    @default(0)
+  readingCount Int     @default(0)
+}
+
+model DailyAggregate {
+  id          Int      @id @default(autoincrement())
+  date        DateTime @unique
+  pm25Avg     Float    @default(0)
+  pm25Min     Int      @default(9999)
+  pm25Max     Int      @default(0)
+  pm10Avg     Float    @default(0)
+  pm10Min     Int      @default(9999)
+  pm10Max     Int      @default(0)
+  co2Avg      Float    @default(0)
+  co2Min      Int      @default(9999)
+  co2Max      Int      @default(0)
+  vocAvg      Float    @default(0)
+  vocMin      Int      @default(9999)
+  vocMax      Int      @default(0)
+  tempAvg     Float    @default(0)
+  tempMin     Float    @default(999)
+  tempMax     Float    @default(-99)
+  humAvg      Float    @default(0)
+  humMin      Float    @default(100)
+  humMax      Float    @default(0)
+  readingCount Int     @default(0)
 }
