@@ -1,48 +1,157 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: 'Outfit', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 }
 
 :root {
-  --background: #0f172a; /* Slate 900 */
-  --foreground: #f8fafc; /* Slate 50 */
+  --background: #0b1120;
+  --foreground: #e2e8f0;
+  --card: rgba(15, 23, 42, 0.7);
+  --card-border: rgba(148, 163, 184, 0.08);
 }
 
 body {
   background: var(--background);
   background-image: 
-    radial-gradient(at 0% 0%, hsla(253,16%,12%,1) 0, transparent 60%), 
-    radial-gradient(at 50% 0%, hsla(225,59%,35%,0.3) 0, transparent 60%), 
-    radial-gradient(at 100% 0%, hsla(339,69%,40%,0.3) 0, transparent 60%),
-    radial-gradient(at 50% 100%, hsla(170,50%,30%,0.2) 0, transparent 60%);
+    radial-gradient(at 0% 0%, hsla(220,40%,8%,1) 0, transparent 50%),
+    radial-gradient(at 100% 0%, hsla(220,30%,10%,0.5) 0, transparent 50%);
   background-attachment: fixed;
   color: var(--foreground);
   font-family: 'Outfit', sans-serif;
-  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Glassmorphism utility */
+/* ── Glass Card ────────────────────────────────────────── */
 .glass {
-  background: rgba(30, 41, 59, 0.4);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
-/* Custom Scrollbar for sleekness */
-::-webkit-scrollbar {
-  width: 8px;
+/* ── Tab Bar ───────────────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  gap: 2px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.08);
+  border-radius: 12px;
+  padding: 4px;
+  overflow-x: auto;
 }
-::-webkit-scrollbar-track {
-  background: transparent;
+
+.tab-item {
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  user-select: none;
 }
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
+
+.tab-item:hover {
+  color: #e2e8f0;
+  background: rgba(148, 163, 184, 0.08);
 }
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.4);
+
+.tab-item.active {
+  color: #ffffff;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+/* ── Pollutant Card ────────────────────────────────────── */
+.pollutant-card {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  backdrop-filter: blur(16px);
+  border-radius: 16px;
+  padding: 20px 24px;
+  transition: all 0.25s ease;
+  cursor: default;
+}
+
+.pollutant-card:hover {
+  border-color: rgba(148, 163, 184, 0.15);
+  background: rgba(15, 23, 42, 0.85);
+  transform: translateY(-2px);
+}
+
+/* ── Hero AQI Banner ───────────────────────────────────── */
+.hero-banner {
+  border-radius: 20px;
+  padding: 32px 40px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.hero-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: inherit;
+  opacity: 0.12;
+  z-index: 0;
+}
+
+/* ── Severity Status Pill ──────────────────────────────── */
+.severity-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ── Sparkline Container ───────────────────────────────── */
+.sparkline-container {
+  height: 40px;
+  width: 100%;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.pollutant-card:hover .sparkline-container {
+  opacity: 1;
+}
+
+/* ── Monospace Numbers ─────────────────────────────────── */
+.mono-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.15); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,0.3); }
+
+/* ── Animations ────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s ease-in-out infinite;
 }
