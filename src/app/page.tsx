@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import useSWR from 'swr';
 import mqtt from 'mqtt';
 import {
@@ -203,7 +203,9 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [liveData, setLiveData] = useState<any[]>([]);
   const [mqttStatus, setMqttStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
+  const [deviceStatus, setDeviceStatus] = useState<'live' | 'idle' | 'offline'>('offline');
   const [activeTab, setActiveTab] = useState<TabId>('overview');
+  const lastMessageTime = useRef<number>(0);
 
   useEffect(() => {
     setMounted(true);
@@ -213,11 +215,23 @@ export default function Home() {
       try {
         const data = JSON.parse(message.toString());
         if (!data.timestamp) data.timestamp = new Date().toISOString();
+        lastMessageTime.current = Date.now();
         setLiveData(prev => [data, ...prev].slice(0, 20));
       } catch { /* ignore parse errors */ }
     });
     client.on('close', () => setMqttStatus('disconnected'));
-    return () => { client.end(); };
+
+    // Check every second if the ESP32 is still sending data
+    const statusInterval = setInterval(() => {
+      const elapsed = Date.now() - lastMessageTime.current;
+      if (lastMessageTime.current === 0 || elapsed > 10000) {
+        setDeviceStatus('idle');
+      } else {
+        setDeviceStatus('live');
+      }
+    }, 1000);
+
+    return () => { client.end(); clearInterval(statusInterval); };
   }, []);
 
   // ── Derived Data ──────────────────────────────────────────
@@ -305,9 +319,11 @@ export default function Home() {
           {/* Right: Meta */}
           <div className="flex flex-col items-start md:items-end gap-2 text-sm">
             <div className="flex items-center gap-2">
-              {mqttStatus === 'connected'
-                ? <><Wifi className="w-4 h-4 text-emerald-400" /><span className="text-emerald-400 font-medium">Live · MQTT</span></>
-                : <><WifiOff className="w-4 h-4 text-red-400" /><span className="text-red-400 font-medium">Reconnecting</span></>
+              {mqttStatus !== 'connected'
+                ? <><WifiOff className="w-4 h-4 text-red-400" /><span className="text-red-400 font-medium">Disconnected</span></>
+                : deviceStatus === 'live'
+                  ? <><Wifi className="w-4 h-4 text-emerald-400" /><span className="text-emerald-400 font-medium">Live · MQTT</span><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span></>
+                  : <><Wifi className="w-4 h-4 text-yellow-400" /><span className="text-yellow-400 font-medium">Connected · Idle</span></>
               }
             </div>
             <span className="text-xs text-slate-500">Last Updated: {lastUpdated}</span>
