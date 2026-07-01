@@ -11,13 +11,13 @@ import {
   getPM25Severity, getPM10Severity, type SeverityResult
 } from '@/lib/aqi';
 import {
-  Wind, Droplets, Thermometer, CloudFog, Activity, Gauge, Wifi, WifiOff, TrendingUp, ArrowUp, ArrowDown, Minus, BarChart2, PieChart as PieChartIcon, Upload, RefreshCcw, Cpu
+  Wind, Droplets, Thermometer, CloudFog, Activity, Gauge, Wifi, WifiOff, TrendingUp, ArrowUp, ArrowDown, Minus, BarChart2, PieChart as PieChartIcon
 } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 // ── Tabs ──────────────────────────────────────────────────────
-type TabId = 'overview' | 'history' | 'pm25' | 'pm10' | 'co2' | 'tvoc' | 'devices';
+type TabId = 'overview' | 'history' | 'pm25' | 'pm10' | 'co2' | 'tvoc';
 const TABS: { id: TabId; label: string; chemical?: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'history', label: 'History' },
@@ -25,7 +25,6 @@ const TABS: { id: TabId; label: string; chemical?: string }[] = [
   { id: 'pm10', label: 'PM', chemical: '10' },
   { id: 'co2',  label: 'CO', chemical: '2' },
   { id: 'tvoc', label: 'TVOC' },
-  { id: 'devices', label: 'Devices' },
 ];
 
 // ── Mini Sparkline ────────────────────────────────────────────
@@ -589,83 +588,6 @@ export default function Home() {
       )}
       {activeTab === 'tvoc' && (
         <DrillDownView title="TVOC" unit="ppb" dataKey="voc" color="#f59e0b" chartData={chartData} latest={latest} severity={tvocSev} />
-      )}
-
-      {activeTab === 'devices' && (
-        <div className="animate-fade-in space-y-6">
-          <div className="glass rounded-2xl p-6">
-            <h3 className="text-xl font-bold text-slate-200 mb-6 flex items-center gap-2">
-              <Cpu className="w-5 h-5 text-blue-400" /> Device Management
-            </h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Firmware Upload Section */}
-              <div className="space-y-4 bg-slate-800/30 p-5 rounded-xl border border-slate-700/50">
-                <h4 className="font-semibold text-slate-300">Cloud OTA Update</h4>
-                <p className="text-sm text-slate-500 mb-4">Upload a compiled .bin file and push it to the ESP32 wirelessly.</p>
-                <form 
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    const formData = new FormData(e.currentTarget);
-                    const file = formData.get('firmware') as File;
-                    if (!file || file.size === 0) return alert('Please select a file');
-                    
-                    try {
-                      // 1. Upload to DB
-                      const res = await fetch('/api/firmware/upload', { method: 'POST', body: formData });
-                      if (!res.ok) throw new Error('Upload failed');
-                      
-                      // 2. Publish MQTT Command
-                      const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
-                      client.on('connect', () => {
-                        client.publish('oxiphy/command/update', 'GO');
-                        client.end();
-                        alert('Firmware uploaded and update command sent to ESP32!');
-                      });
-                    } catch (err) {
-                      alert('Error: ' + err);
-                    }
-                  }} 
-                  className="space-y-3"
-                >
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1">Firmware Version</label>
-                    <input type="text" name="version" required placeholder="e.g. 1.0.1" className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-slate-300 focus:outline-none focus:border-blue-500" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1">Firmware Binary (.bin)</label>
-                    <input type="file" name="firmware" accept=".bin" required className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-slate-300 file:mr-4 file:py-1 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-500/20 file:text-blue-400 hover:file:bg-blue-500/30" />
-                  </div>
-                  <button type="submit" className="w-full mt-4 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-lg text-sm font-medium transition-colors">
-                    <Upload className="w-4 h-4" /> Push Update to Device
-                  </button>
-                </form>
-              </div>
-
-              {/* Remote Actions Section */}
-              <div className="space-y-4 bg-slate-800/30 p-5 rounded-xl border border-slate-700/50">
-                <h4 className="font-semibold text-slate-300">Remote Actions</h4>
-                <p className="text-sm text-slate-500 mb-4">Send commands directly to your connected device.</p>
-                
-                <button 
-                  onClick={() => {
-                    if(confirm('Are you sure? This will wipe the Wi-Fi credentials on the ESP32 and it will enter Captive Portal mode.')) {
-                      const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
-                      client.on('connect', () => {
-                        client.publish('oxiphy/command/reset_wifi', 'GO');
-                        client.end();
-                        alert('Wi-Fi Reset command sent!');
-                      });
-                    }
-                  }}
-                  className="w-full flex items-center justify-center gap-2 bg-rose-600/20 hover:bg-rose-600/40 text-rose-400 border border-rose-600/30 py-3 rounded-lg text-sm font-medium transition-colors"
-                >
-                  <RefreshCcw className="w-4 h-4" /> Reset Device Wi-Fi
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
 
     </main>

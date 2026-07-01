@@ -66,10 +66,3 @@ model DailyAggregate {
   humMax      Float    @default(0)
   readingCount Int     @default(0)
 }
-
-model Firmware {
-  id        Int      @id @default(autoincrement())
-  version   String
-  uploaded  DateTime @default(now())
-  binData   Bytes
-}
